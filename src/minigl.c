@@ -1,5 +1,5 @@
-\
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
@@ -28,11 +28,6 @@
 #define GFX_W      512
 #define GFX_H      512
 #define GVRAM_BASE 0xC00000
-
-#ifndef __human68k__
-/* Host-side fallback framebuffer for building/testing. */
-static uint16_t g_host_fb[GFX_W * GFX_H];
-#endif
 
 /* Macro style taken from common X68000 examples. */
 #define RGB2GRB(r, g, b) ( ((uint16_t)((b)&0xF8) >> 2) | ((uint16_t)((g)&0xF8) << 8) | ((uint16_t)((r)&0xF8) << 3) | 1 )
@@ -66,19 +61,20 @@ static int g_tri_count = 0;
 static ScreenPt g_tri_pts[3];
 
 /* Supervisor mode token for direct VRAM access. */
-#ifdef __human68k__
 static uint16_t g_super_token = 0;
-#endif
 static int g_platform_inited = 0;
+
+/* Double buffer (RAM) - enabled only if GLUT_DOUBLE was requested. */
+static int g_double_enabled = 0;
+static uint16_t *g_front_buf = NULL;
+static uint16_t *g_back_buf = NULL;
 
 static volatile uint16_t *gvramPtr(int x, int y)
 {
-#ifdef __human68k__
-  uintptr_t addr = (uintptr_t)GVRAM_BASE + (uintptr_t)(y * GFX_W + x) * 2u;
-  return (volatile uint16_t *)addr;
-#else
-  return (volatile uint16_t *)&g_host_fb[y * GFX_W + x];
-#endif
+  if (g_double_enabled && g_back_buf) {
+    return (volatile uint16_t *)&g_back_buf[y * GFX_W + x];
+  }
+  return (volatile uint16_t *)(GVRAM_BASE + (y * GFX_W + x) * 2);
 }
 static void putPixel(int x, int y, uint16_t c)
 {
@@ -110,10 +106,6 @@ static void matIdentity(Mat4 *o)
 
 static Mat4 matMul(const Mat4 *a, const Mat4 *b)
 {
-  /* Column-major matrix multiply, matching OpenGL conventions.
-     Storage: m[col*4 + row].
-     Computes r = a * b.
-  */
   Mat4 r;
   for (int col = 0; col < 4; col++) {
     for (int row = 0; row < 4; row++) {
@@ -222,6 +214,8 @@ static ScreenPt projectToScreen(float x, float y, float z)
     pmv.m[0] * vx + pmv.m[4] * vy + pmv.m[8]  * vz + pmv.m[12] * vw;
   float cy =
     pmv.m[1] * vx + pmv.m[5] * vy + pmv.m[9]  * vz + pmv.m[13] * vw;
+  float cz =
+    pmv.m[2] * vx + pmv.m[6] * vy + pmv.m[10] * vz + pmv.m[14] * vw;
   float cw =
     pmv.m[3] * vx + pmv.m[7] * vy + pmv.m[11] * vz + pmv.m[15] * vw;
 
@@ -248,10 +242,48 @@ static void emitLine(ScreenPt a, ScreenPt b)
   drawLine(a.x, a.y, b.x, b.y, g_draw_color);
 }
 
+void miniglSetDoubleBuffered(int enabled)
+{
+  g_double_enabled = enabled ? 1 : 0;
+}
+
+void miniglSwapBuffers(void)
+{
+  if (!g_double_enabled || !g_front_buf || !g_back_buf) return;
+  /* Swap front/back, then present the new front to VRAM. */
+  uint16_t *tmp = g_front_buf;
+  g_front_buf = g_back_buf;
+  g_back_buf = tmp;
+  /* Copy to VRAM (512x512x16bpp = 512 KB). */
+#ifdef __human68k__
+  void *dst = (void *)(uintptr_t)GVRAM_BASE;
+  memcpy(dst, (const void *)g_front_buf, (size_t)GFX_W * (size_t)GFX_H * 2u);
+#endif
+}
+
 void miniglPlatformInit(void)
 {
   if (g_platform_inited) return;
   g_platform_inited = 1;
+
+  /* Allocate RAM buffers for double buffering if requested. */
+  if (g_double_enabled) {
+    size_t n = (size_t)GFX_W * (size_t)GFX_H;
+    g_front_buf = (uint16_t *)malloc(n * 2u);
+    g_back_buf  = (uint16_t *)malloc(n * 2u);
+    if (!g_front_buf || !g_back_buf) {
+      /* Fallback to single buffer if allocation failed. */
+      free(g_front_buf);
+      free(g_back_buf);
+      g_front_buf = NULL;
+      g_back_buf = NULL;
+      g_double_enabled = 0;
+    } else {
+      /* Initialize both buffers to black. */
+      memset(g_front_buf, 0, n * 2u);
+      memset(g_back_buf, 0, n * 2u);
+    }
+  }
 
 #ifdef __human68k__
   _iocs_b_curoff();
@@ -298,8 +330,8 @@ void glClear(GLbitfield mask)
   if (!(mask & GL_COLOR_BUFFER_BIT)) return;
 
 #ifdef __human68k__
-  /* Fast clear if black. */
-  if (g_clear_color == 0) {
+  /* Fast clear if black (single-buffer only). */
+  if (!g_double_enabled && g_clear_color == 0) {
     _iocs_g_clr_on();
     return;
   }

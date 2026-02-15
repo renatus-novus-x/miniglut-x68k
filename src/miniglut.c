@@ -14,6 +14,8 @@
 /* Forward: the renderer uses fixed 512x512 for now. */
 extern void miniglPlatformInit(void);
 extern void miniglPlatformShutdown(void);
+extern void miniglSetDoubleBuffered(int enabled);
+extern void miniglSwapBuffers(void);
 
 /* Callback storage */
 static GLUTdisplayCB g_display_cb = NULL;
@@ -22,6 +24,8 @@ static GLUTidleCB g_idle_cb = NULL;
 
 static volatile int g_running = 1;
 static volatile int g_redisplay = 1;
+
+static unsigned int g_display_mode = 0;
 
 void glutInit(int *argc, char **argv)
 {
@@ -32,10 +36,10 @@ void glutInit(int *argc, char **argv)
 int glutCreateWindow(const char *title)
 {
   (void)title;
+  miniglSetDoubleBuffered((g_display_mode & GLUT_DOUBLE) != 0);
   miniglPlatformInit();
   return 1;
 }
-
 void glutDisplayFunc(GLUTdisplayCB cb)
 {
   g_display_cb = cb;
@@ -54,14 +58,14 @@ void glutIdleFunc(GLUTidleCB cb)
 
 void glutInitDisplayMode(unsigned int mode)
 {
-  (void)mode;
+  g_display_mode = mode;
 }
-
 void glutSwapBuffers(void)
 {
-  /* No real double buffering in this minimal prototype. */
+  if (g_display_mode & GLUT_DOUBLE) {
+    miniglSwapBuffers();
+  }
 }
-
 void glutPostRedisplay(void)
 {
   g_redisplay = 1;

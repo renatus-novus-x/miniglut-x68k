@@ -64,6 +64,10 @@ static ScreenPt g_tri_pts[3];
 static uint16_t g_super_token = 0;
 static int g_platform_inited = 0;
 
+/* Saved state to restore on exit. */
+static int g_saved_crtmod = 0;
+static int g_saved_crtmod_valid = 0;
+
 /* Double buffer (RAM) - enabled only if GLUT_DOUBLE was requested. */
 static int g_double_enabled = 0;
 static uint16_t *g_front_buf = NULL;
@@ -286,6 +290,11 @@ void miniglPlatformInit(void)
   }
 
 #ifdef __human68k__
+  if (!g_saved_crtmod_valid) {
+    /* IOCS _CRTMOD(-1) returns current CRT mode. */
+    g_saved_crtmod = _iocs_crtmod(-1);
+    g_saved_crtmod_valid = 1;
+  }
   _iocs_b_curoff();
   _iocs_crtmod(CRT_MODE);
   _iocs_vpage(0);
@@ -307,8 +316,9 @@ void miniglPlatformShutdown(void)
 #ifdef __human68k__
   _dos_super(g_super_token);
   _iocs_b_curon();
-  /* Restore to text mode (simple default). */
-  _iocs_crtmod(0);
+  if (g_saved_crtmod_valid) {
+    _iocs_crtmod(g_saved_crtmod);
+  }
 #endif
 }
 

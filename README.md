@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/renatus-novus-x/miniglut-x68k/main/images/tether.gif" title="tether" />
+
 miniglut-x68k (experimental)
 ===========================
 
@@ -46,3 +48,6 @@ Notes / limitations
 
 References that informed the minimal X68000 video/IOCS access style:
 - Target-Earth X68000 dev code examples (GVRAM access, _dos_super, _iocs_crtmod) 
+
+## Download
+- [demo_wirecube.x](https://raw.githubusercontent.com/renatus-novus-x/miniglut-x68k/main/bin/demo_wirecube.x)

@@ -80,6 +80,7 @@ int main(int argc, char **argv)
 {
   glutInit(&argc, argv);
   glutInitDisplayMode(/*GLUT_SINGLE*/ GLUT_DOUBLE| GLUT_RGB);
+  glutInitWindowSize(512, 512);
   glutCreateWindow("miniglut-x68k demo");
 
   glutDisplayFunc(display);

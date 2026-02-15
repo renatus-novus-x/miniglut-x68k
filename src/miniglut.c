@@ -11,11 +11,12 @@
 
 #include "GL/glut.h"
 
-/* Forward: the renderer uses fixed 512x512 for now. */
+/* Forward: the renderer chooses 512x512 or 256x256 based on glutInitWindowSize(). */
 extern void miniglPlatformInit(void);
 extern void miniglPlatformShutdown(void);
 extern void miniglSetDoubleBuffered(int enabled);
 extern void miniglSwapBuffers(void);
+extern void miniglSetRequestedSize(int w, int h);
 
 /* Callback storage */
 static GLUTdisplayCB g_display_cb = NULL;
@@ -27,6 +28,10 @@ static volatile int g_redisplay = 1;
 
 static unsigned int g_display_mode = 0;
 
+/* Requested initial window size (used to choose 512x512 or 256x256 mode). */
+static int g_init_w = 512;
+static int g_init_h = 512;
+
 void glutInit(int *argc, char **argv)
 {
   (void)argc;
@@ -37,6 +42,7 @@ int glutCreateWindow(const char *title)
 {
   (void)title;
   miniglSetDoubleBuffered((g_display_mode & GLUT_DOUBLE) != 0);
+  miniglSetRequestedSize(g_init_w, g_init_h);
   miniglPlatformInit();
   return 1;
 }
@@ -59,6 +65,11 @@ void glutIdleFunc(GLUTidleCB cb)
 void glutInitDisplayMode(unsigned int mode)
 {
   g_display_mode = mode;
+}
+void glutInitWindowSize(int width, int height)
+{
+  if (width  > 0) g_init_w = width;
+  if (height > 0) g_init_h = height;
 }
 void glutSwapBuffers(void)
 {

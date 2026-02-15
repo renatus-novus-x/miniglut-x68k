@@ -33,6 +33,7 @@ void glutMainLoop(void);
 
 /* Extra helpers for compatibility. */
 void glutInitDisplayMode(unsigned int mode);
+void glutInitWindowSize(int width, int height);
 void glutSwapBuffers(void);
 void glutPostRedisplay(void);
 void glutLeaveMainLoop(void);

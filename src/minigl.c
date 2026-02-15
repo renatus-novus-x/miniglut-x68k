@@ -24,10 +24,26 @@
   Pixel format: GRB + intensity bit (GRBI), 5 bits per channel.
 */
 
-#define CRT_MODE   12
-#define GFX_W      512
-#define GFX_H      512
-#define GVRAM_BASE 0xC00000
+/*
+  Software wireframe renderer to GVRAM (X68000).
+
+  Supported modes (selected at startup via glutInitWindowSize):
+    - 512x512, 16-bit color: CRTMOD 12
+    - 256x256, 16-bit color: CRTMOD 14 (virtual 512x512, we can flip via HOME)
+*/
+
+#define VRAM_STRIDE_W 512
+#define VRAM_H        512
+#define GVRAM_BASE    0xC00000
+
+static int g_crt_mode = 12;
+static int g_view_w = 512;
+static int g_view_h = 512;
+static int g_req_w = 512;
+static int g_req_h = 512;
+
+#define GFX_W (g_view_w)
+#define GFX_H (g_view_h)
 
 /* Macro style taken from common X68000 examples. */
 #define RGB2GRB(r, g, b) ( ((uint16_t)((b)&0xF8) >> 2) | ((uint16_t)((g)&0xF8) << 8) | ((uint16_t)((r)&0xF8) << 3) | 1 )
@@ -73,13 +89,39 @@ static int g_double_enabled = 0;
 static uint16_t *g_front_buf = NULL;
 static uint16_t *g_back_buf = NULL;
 
+#ifdef __human68k__
+/* "Tiled" VRAM double-buffering for CRT_MODE 14 (256x256 shown inside a 512x512 16bpp plane).
+   We flip by changing the HOME (display origin) between (0,0) and (256,0) and drawing into the other half.
+   This avoids RAM->VRAM memcpy and touches ~1/4 pixels per frame.
+*/
+static int g_vram_tiled_flip = 0;
+static int g_view_off_x = 0;
+static int g_view_off_y = 0;
+static int g_draw_off_x = 0;
+static int g_draw_off_y = 0;
+#endif
+
 static volatile uint16_t *gvramPtr(int x, int y)
 {
   if (g_double_enabled && g_back_buf) {
     return (volatile uint16_t *)&g_back_buf[y * GFX_W + x];
   }
-  return (volatile uint16_t *)(GVRAM_BASE + (y * GFX_W + x) * 2);
+
+#ifdef __human68k__
+  /* Direct VRAM access (optionally into the "back" tile). */
+  int gx = x;
+  int gy = y;
+  if (g_vram_tiled_flip) {
+    gx += g_draw_off_x;
+    gy += g_draw_off_y;
+  }
+  return (volatile uint16_t *)(uintptr_t)(GVRAM_BASE + (gy * VRAM_STRIDE_W + gx) * 2);
+#else
+  /* Host build: no real VRAM. */
+  return (volatile uint16_t *)(uintptr_t)0;
+#endif
 }
+
 static void putPixel(int x, int y, uint16_t c)
 {
   if ((unsigned)x >= GFX_W || (unsigned)y >= GFX_H) return;
@@ -88,6 +130,17 @@ static void putPixel(int x, int y, uint16_t c)
 
 static void drawLine(int x0, int y0, int x1, int y1, uint16_t c)
 {
+/*
+  Line rasterizer: Default is fixed-point DDA (single divide, then add/shift).
+  Define MINIGL_USE_BRESENHAM to build the previous integer Bresenham version
+  for A/B comparisons.
+
+  Note:
+    - Classic float DDA can be slower on 68000 (no FPU on many models).
+    - This implementation uses 16.16 fixed-point to keep it fast-ish.
+*/
+#ifdef MINIGL_USE_BRESENHAM
+  /* Previous implementation (integer Bresenham). */
   int dx = (x1 > x0) ? (x1 - x0) : (x0 - x1);
   int sx = (x0 < x1) ? 1 : -1;
   int dy = (y1 > y0) ? (y0 - y1) : (y1 - y0); /* negative */
@@ -100,6 +153,43 @@ static void drawLine(int x0, int y0, int x1, int y1, uint16_t c)
     if (e2 >= dy) { err += dy; x0 += sx; }
     if (e2 <= dx) { err += dx; y0 += sy; }
   }
+#else
+  /* Fixed-point DDA. */
+  int dx = x1 - x0;
+  int dy = y1 - y0;
+  int adx = (dx < 0) ? -dx : dx;
+  int ady = (dy < 0) ? -dy : dy;
+
+  /* Fast paths. */
+  if (dy == 0) {
+    if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
+    for (int x = x0; x <= x1; ++x) putPixel(x, y0, c);
+    return;
+  }
+  if (dx == 0) {
+    if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
+    for (int y = y0; y <= y1; ++y) putPixel(x0, y, c);
+    return;
+  }
+
+  int steps = (adx > ady) ? adx : ady;
+  if (steps <= 0) {
+    putPixel(x0, y0, c);
+    return;
+  }
+
+  /* 16.16 fixed-point increments (one division each). */
+  int32_t x = ((int32_t)x0) << 16;
+  int32_t y = ((int32_t)y0) << 16;
+  int32_t x_inc = (((int32_t)dx) << 16) / (int32_t)steps;
+  int32_t y_inc = (((int32_t)dy) << 16) / (int32_t)steps;
+
+  for (int i = 0; i <= steps; ++i) {
+    putPixel((int)(x >> 16), (int)(y >> 16), c);
+    x += x_inc;
+    y += y_inc;
+  }
+#endif
 }
 
 static void matIdentity(Mat4 *o)
@@ -251,41 +341,111 @@ void miniglSetDoubleBuffered(int enabled)
   g_double_enabled = enabled ? 1 : 0;
 }
 
+void miniglSetRequestedSize(int w, int h)
+{
+  if (w > 0) g_req_w = w;
+  if (h > 0) g_req_h = h;
+}
+
 void miniglSwapBuffers(void)
 {
+#ifdef __human68k__
+  if (g_vram_tiled_flip) {
+    /* Present the region we just rendered by moving the display origin (HOME). */
+    g_view_off_x = g_draw_off_x;
+    g_view_off_y = g_draw_off_y;
+
+    /* Toggle draw target to the other 256x256 tile. */
+    g_draw_off_x = (g_view_off_x == 0) ? 256 : 0;
+    g_draw_off_y = 0;
+
+    /* Page argument is kept as 0 to match existing vpage(0) usage in this codebase. */
+    _iocs_home(0, g_view_off_x, g_view_off_y);
+    return;
+  }
+#endif
+
   if (!g_double_enabled || !g_front_buf || !g_back_buf) return;
+
   /* Swap front/back, then present the new front to VRAM. */
   uint16_t *tmp = g_front_buf;
   g_front_buf = g_back_buf;
   g_back_buf = tmp;
-  /* Copy to VRAM (512x512x16bpp = 512 KB). */
+
 #ifdef __human68k__
-  void *dst = (void *)(uintptr_t)GVRAM_BASE;
-  memcpy(dst, (const void *)g_front_buf, (size_t)GFX_W * (size_t)GFX_H * 2u);
+  /* Copy only the visible 256x256 area into VRAM (stride is 512 in 16bpp modes). */
+  volatile uint16_t *dst = (volatile uint16_t *)(uintptr_t)GVRAM_BASE;
+  const uint16_t *src = (const uint16_t *)g_front_buf;
+  for (int y = 0; y < GFX_H; y++) {
+    memcpy((void *)(dst + (size_t)y * (size_t)VRAM_STRIDE_W),
+           (const void *)(src + (size_t)y * (size_t)GFX_W),
+           (size_t)GFX_W * 2u);
+  }
 #endif
 }
+
 
 void miniglPlatformInit(void)
 {
   if (g_platform_inited) return;
   g_platform_inited = 1;
 
-  /* Allocate RAM buffers for double buffering if requested. */
-  if (g_double_enabled) {
-    size_t n = (size_t)GFX_W * (size_t)GFX_H;
-    g_front_buf = (uint16_t *)malloc(n * 2u);
-    g_back_buf  = (uint16_t *)malloc(n * 2u);
-    if (!g_front_buf || !g_back_buf) {
-      /* Fallback to single buffer if allocation failed. */
-      free(g_front_buf);
-      free(g_back_buf);
-      g_front_buf = NULL;
-      g_back_buf = NULL;
-      g_double_enabled = 0;
+  /* Choose 512x512 (CRTMOD 12) or 256x256 (CRTMOD 14) based on the requested window size. */
+  {
+    int d256 = abs(g_req_w - 256) + abs(g_req_h - 256);
+    int d512 = abs(g_req_w - 512) + abs(g_req_h - 512);
+    if (d256 < d512) {
+      g_crt_mode = 14;
+      g_view_w = 256;
+      g_view_h = 256;
     } else {
-      /* Initialize both buffers to black. */
-      memset(g_front_buf, 0, n * 2u);
-      memset(g_back_buf, 0, n * 2u);
+      g_crt_mode = 12;
+      g_view_w = 512;
+      g_view_h = 512;
+    }
+  }
+
+#ifdef __human68k__
+  /* Reset flip state; re-initialized below if supported by the selected mode. */
+  g_vram_tiled_flip = 0;
+  g_view_off_x = 0;  g_view_off_y = 0;
+  g_draw_off_x = 0;  g_draw_off_y = 0;
+#endif
+
+
+    /* Allocate RAM buffers for double buffering if requested.
+     On Human68k + CRT_MODE 14, we prefer "tiled VRAM" flip to avoid memcpy. */
+#ifdef __human68k__
+  if (g_double_enabled && g_crt_mode == 14) {
+    g_vram_tiled_flip = 1;
+    g_view_off_x = 0;  g_view_off_y = 0;
+    g_draw_off_x = 256; g_draw_off_y = 0;
+  }
+#endif
+
+  if (g_double_enabled) {
+#ifdef __human68k__
+    if (!g_vram_tiled_flip)
+#endif
+    {
+      size_t n = (size_t)GFX_W * (size_t)GFX_H;
+      g_front_buf = (uint16_t *)malloc(n * 2u);
+      g_back_buf  = (uint16_t *)malloc(n * 2u);
+      if (!g_front_buf || !g_back_buf) {
+        /* Fallback to single buffer if allocation failed. */
+        free(g_front_buf);
+        free(g_back_buf);
+        g_front_buf = NULL;
+        g_back_buf = NULL;
+        g_double_enabled = 0;
+#ifdef __human68k__
+        g_vram_tiled_flip = 0;
+#endif
+      } else {
+        /* Initialize both buffers to black. */
+        memset(g_front_buf, 0, n * 2u);
+        memset(g_back_buf, 0, n * 2u);
+      }
     }
   }
 
@@ -296,7 +456,7 @@ void miniglPlatformInit(void)
     g_saved_crtmod_valid = 1;
   }
 
-  _iocs_crtmod(CRT_MODE);
+  _iocs_crtmod(g_crt_mode);
 
   /* Hide text cursor (B_CUROFF only stops blinking; OS_CUROF actually hides it). */
   _iocs_os_curof();
@@ -304,6 +464,8 @@ void miniglPlatformInit(void)
 
   _iocs_vpage(0);
   _iocs_g_clr_on();
+  /* Ensure the 256x256 view starts at (0,0). */
+  _iocs_home(0, 0, 0);
   g_super_token = _dos_super(0);
 #endif
 

@@ -295,8 +295,13 @@ void miniglPlatformInit(void)
     g_saved_crtmod = _iocs_crtmod(-1);
     g_saved_crtmod_valid = 1;
   }
-  _iocs_b_curoff();
+
   _iocs_crtmod(CRT_MODE);
+
+  /* Hide text cursor (B_CUROFF only stops blinking; OS_CUROF actually hides it). */
+  _iocs_os_curof();
+  _iocs_b_curoff();
+
   _iocs_vpage(0);
   _iocs_g_clr_on();
   g_super_token = _dos_super(0);
@@ -315,10 +320,11 @@ void miniglPlatformShutdown(void)
 
 #ifdef __human68k__
   _dos_super(g_super_token);
-  _iocs_b_curon();
   if (g_saved_crtmod_valid) {
     _iocs_crtmod(g_saved_crtmod);
   }
+  _iocs_os_curon();
+  _iocs_b_curon();
 #endif
 }
 

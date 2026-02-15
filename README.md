@@ -15,8 +15,8 @@ Implemented GLUT APIs (core asked in this prototype)
 - glutIdleFunc
 
 Extra compatibility helpers (commonly used by GLUT samples)
-- glutInitDisplayMode (accepted, currently ignored)
-- glutSwapBuffers (no-op for now)
+- glutInitDisplayMode (GLUT_SINGLE or GLUT_DOUBLE)
+- glutSwapBuffers
 - glutPostRedisplay
 - glutLeaveMainLoop
 

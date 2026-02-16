@@ -66,8 +66,8 @@ include/GL にヘッダがあります。OpenGL の完全実装ではなく、�
 - include/GL/glu.h  : GLU 風サブセット（gluPerspective のみ）
 - src/miniglut.c    : GLUT 実装
 - src/minigl.c      : ソフトウェア描画と X68000 の初期化/復帰処理
-- src/demo_wirecube.c : デモ（回転ワイヤキューブ）
-- src/demo_objflat.c  : デモ（OBJ 読込、ワイヤフレーム/フラットシェーディング切替）
+- src/demo_wirecube.c : デモ（ワイヤフレームのキューブが回転します）
+- src/demo_objflat.c  : デモ（.obj 読込、ワイヤフレーム/フラットシェーディング切替）
 
 ビルド（elf2x68k）
 -----------------
@@ -93,9 +93,9 @@ demo_objflat
   - demo_objflat.x model.obj
   - 例: demo_objflat.x bin/bunny.obj
 - キー:
-  - t または Space: フラット <-> ワイヤ切替
-  - f: フラット（面塗り）
-  - w: ワイヤ
+  - t または Space: フラットシェーディング <-> ワイヤフレーム切替('t'oggle)
+  - f: フラットシェーディング('f'lat shading)
+  - w: ワイヤフレーム('w'ire frame)
   - ESC: 終了
 
 注意点 / 制限

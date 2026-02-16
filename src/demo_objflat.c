@@ -42,6 +42,7 @@ typedef struct {
 static Mesh g_mesh;
 static float g_angle = 0.0f;
 static int g_mode_flat = 1;
+static int g_is_fallback = 0;
 
 /* Headlight in view space: towards +Z (camera at origin looking -Z). */
 static const Vec3 g_light_dir_view = { 0.0f, 0.0f, 1.0f };
@@ -199,49 +200,93 @@ static Vec3 vcross(Vec3 a, Vec3 b) {
 }
 static float vdot(Vec3 a, Vec3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
 
-static Vec3 rotateNormal(Vec3 n, float angDeg)
+
+static Vec3 rotateNormalAxis110(Vec3 v, float angDeg)
 {
-  float ay = angDeg * (float)M_PI / 180.0f;
-  float ax = (angDeg * 0.7f) * (float)M_PI / 180.0f;
-  float cy = cosf(ay), sy = sinf(ay);
-  float cx = cosf(ax), sx = sinf(ax);
+  /* Match demo_wirecube: glRotatef(angle, 1,1,0) */
+  const float inv = 0.7071067811865475f; /* 1/sqrt(2) */
+  Vec3 a = { inv, inv, 0.0f };
 
-  /* Rotate Y */
-  float x1 =  cy*n.x + sy*n.z;
-  float z1 = -sy*n.x + cy*n.z;
-  float y1 =  n.y;
+  float t = angDeg * (float)M_PI / 180.0f;
+  float c = cosf(t);
+  float s = sinf(t);
 
-  /* Rotate X */
+  /* Rodrigues' rotation formula */
+  Vec3 axv = {
+    a.y * v.z - a.z * v.y,
+    a.z * v.x - a.x * v.z,
+    a.x * v.y - a.y * v.x
+  };
+  float adv = a.x * v.x + a.y * v.y + a.z * v.z;
+
   Vec3 r;
-  r.y =  cx*y1 - sx*z1;
-  r.z =  sx*y1 + cx*z1;
-  r.x =  x1;
+  r.x = v.x * c + axv.x * s + a.x * adv * (1.0f - c);
+  r.y = v.y * c + axv.y * s + a.y * adv * (1.0f - c);
+  r.z = v.z * c + axv.z * s + a.z * adv * (1.0f - c);
   return r;
+}
+
+
+
+static void drawCubeLines(void)
+{
+  /* Same cube edges as demo_wirecube.x (no diagonals). */
+  const float v[8][3] = {
+    {-1, -1, -1},
+    { 1, -1, -1},
+    { 1,  1, -1},
+    {-1,  1, -1},
+    {-1, -1,  1},
+    { 1, -1,  1},
+    { 1,  1,  1},
+    {-1,  1,  1},
+  };
+
+  const int e[12][2] = {
+    {0,1},{1,2},{2,3},{3,0},
+    {4,5},{5,6},{6,7},{7,4},
+    {0,4},{1,5},{2,6},{3,7},
+  };
+
+  glBegin(GL_LINES);
+  for (int i = 0; i < 12; i++) {
+    int a = e[i][0];
+    int b = e[i][1];
+    glVertex3f(v[a][0], v[a][1], v[a][2]);
+    glVertex3f(v[b][0], v[b][1], v[b][2]);
+  }
+  glEnd();
 }
 
 static void display(void)
 {
-  glClearColor(0,0,0,1);
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  int w = miniglGetWidth();
-  int h = miniglGetHeight();
-  float aspect = (h != 0) ? ((float)w / (float)h) : 1.0f;
-
+  /* Match demo_wirecube.x */
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
-  gluPerspective(60.0f, aspect, 0.5f, 100.0f);
+  gluPerspective(60.0f, 1.0f, 0.1f, 100.0f);
 
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
-  glRotatef(g_angle * 0.7f, 1, 0, 0);
-  glRotatef(g_angle, 0, 1, 0);
-  glTranslatef(0, 0, -3.0f);
+  glTranslatef(0.0f, 0.0f, -5.0f);
+  glRotatef(g_angle, 1.0f, 1.0f, 0.0f);
+  glScalef(1.2f, 1.2f, 1.2f);
+
+  /* When we are showing the fallback cube in wireframe mode, draw exactly the same edges as demo_wirecube.x. */
+  if (!g_mode_flat && g_is_fallback) {
+    glColor3ub(255, 255, 255);
+    drawCubeLines();
+    glFlush();
+    glutSwapBuffers();
+    return;
+  }
 
   miniglSetFillTriangles(g_mode_flat);
 
   glBegin(GL_TRIANGLES);
-  for (int i=0;i<g_mesh.t_count;i++) {
+  for (int i = 0; i < g_mesh.t_count; i++) {
     Tri tr = g_mesh.t[i];
 
     Vec3 p0 = g_mesh.v[tr.i0];
@@ -259,19 +304,22 @@ static void display(void)
         float inv_len = 1.0f / sqrtf(len2);
         n.x *= inv_len; n.y *= inv_len; n.z *= inv_len;
 
-        Vec3 nv = rotateNormal(n, g_angle);
+        /* Transform normal with the same rotation as demo_wirecube.x */
+        Vec3 nv = rotateNormalAxis110(n, g_angle);
+
+        /* Headlight (vector from surface to camera) in view space: +Z */
         I = vdot(nv, g_light_dir_view);
         if (I < 0.0f) I = 0.0f;
         if (I > 1.0f) I = 1.0f;
       }
 
-      /* Backface cull in filled mode (cheap). */
+      /* Backface cull in filled mode. */
       if (I <= 0.0f) continue;
 
       unsigned char c = (unsigned char)(I * 255.0f);
       glColor3ub(c, c, c);
     } else {
-      glColor3ub(255,255,255);
+      glColor3ub(255, 255, 255);
     }
 
     glVertex3f(p0.x, p0.y, p0.z);
@@ -280,6 +328,7 @@ static void display(void)
   }
   glEnd();
 
+  glFlush();
   glutSwapBuffers();
 }
 
@@ -306,18 +355,20 @@ int main(int argc, char **argv)
 
   if (path && loadObj(path, &g_mesh)) {
     printf("Loaded OBJ: %s (%d vertices, %d triangles)\n", path, g_mesh.v_count, g_mesh.t_count);
+    g_is_fallback = 0;
   } else {
     if (path) printf("Failed to load OBJ: %s\n", path);
     printf("Using fallback cube.\n");
     buildFallbackCube(&g_mesh);
+    g_is_fallback = 1;
   }
   normalizeMeshToUnit(&g_mesh);
 
   glutInit(&argc, argv);
 
   /* Choose 256 or 512 by editing these, or let the library pick the closest. */
-  glutInitWindowSize(256, 256);
-  glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
+  glutInitWindowSize(512, 512);
+  glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
   glutCreateWindow("demo_objflat");
 
   glutDisplayFunc(display);

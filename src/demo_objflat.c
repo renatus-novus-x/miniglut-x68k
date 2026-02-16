@@ -368,7 +368,7 @@ int main(int argc, char **argv)
   glutInit(&argc, argv);
 
   /* Choose 256 or 512 by editing these, or let the library pick the closest. */
-  glutInitWindowSize(512, 512);
+  glutInitWindowSize(256, 256);
   glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
   glutCreateWindow("demo_objflat");
 

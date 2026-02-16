@@ -159,7 +159,8 @@ static void buildFallbackCube(Mesh *m)
     meshPushV(m, v);
   }
   for (int i = 0; i < 12; i++) {
-    meshPushTri(m, F[i][0], F[i][1], F[i][2]);
+    /* Flip winding so outward normals match the viewer/light convention. */
+    meshPushTri(m, F[i][0], F[i][2], F[i][1]);
   }
 }
 

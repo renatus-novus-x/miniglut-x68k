@@ -33,6 +33,24 @@ typedef struct { float x, y, z; } Vec3;
 typedef struct { int i0, i1, i2; } Tri;
 
 typedef struct {
+  int tri_idx;
+  float z;
+  unsigned char shade;
+} DrawTri;
+
+static DrawTri *g_drawtris = NULL;
+static int g_drawtris_cap = 0;
+
+static int cmpDrawTri(const void *a, const void *b)
+{
+  const DrawTri *pa = (const DrawTri *)a;
+  const DrawTri *pb = (const DrawTri *)b;
+  if (pa->z < pb->z) return -1;
+  if (pa->z > pb->z) return 1;
+  return 0;
+}
+
+typedef struct {
   Vec3 *v;
   int v_count, v_cap;
   Tri  *t;
@@ -227,6 +245,26 @@ static Vec3 rotateNormalAxis110(Vec3 v, float angDeg)
   return r;
 }
 
+static Vec3 rotateAxis110CS(Vec3 v, float c, float s)
+{
+  const float inv = 0.7071067811865475f; /* 1/sqrt(2) */
+  Vec3 a = { inv, inv, 0.0f };
+
+  Vec3 axv = {
+    a.y * v.z - a.z * v.y,
+    a.z * v.x - a.x * v.z,
+    a.x * v.y - a.y * v.x
+  };
+  float adv = a.x * v.x + a.y * v.y + a.z * v.z;
+
+  Vec3 r;
+  r.x = v.x * c + axv.x * s + a.x * adv * (1.0f - c);
+  r.y = v.y * c + axv.y * s + a.y * adv * (1.0f - c);
+  r.z = v.z * c + axv.z * s + a.z * adv * (1.0f - c);
+  return r;
+}
+
+
 
 
 static void drawCubeLines(void)
@@ -286,48 +324,100 @@ static void display(void)
 
   miniglSetFillTriangles(g_mode_flat);
 
-  glBegin(GL_TRIANGLES);
-  for (int i = 0; i < g_mesh.t_count; i++) {
-    Tri tr = g_mesh.t[i];
+  if (g_mode_flat) {
+    /* Painter's algorithm (back-to-front) since we have no Z buffer. */
+    int draw_n = 0;
 
-    Vec3 p0 = g_mesh.v[tr.i0];
-    Vec3 p1 = g_mesh.v[tr.i1];
-    Vec3 p2 = g_mesh.v[tr.i2];
+    if (g_mesh.t_count > g_drawtris_cap) {
+      int nc = g_mesh.t_count;
+      DrawTri *nt = (DrawTri *)realloc(g_drawtris, (size_t)nc * sizeof(DrawTri));
+      if (!nt) exit(1);
+      g_drawtris = nt;
+      g_drawtris_cap = nc;
+    }
 
-    if (g_mode_flat) {
+    float ang = g_angle * (float)M_PI / 180.0f;
+    float c = cosf(ang);
+    float s = sinf(ang);
+
+    for (int i = 0; i < g_mesh.t_count; i++) {
+      Tri tr = g_mesh.t[i];
+
+      Vec3 p0 = g_mesh.v[tr.i0];
+      Vec3 p1 = g_mesh.v[tr.i1];
+      Vec3 p2 = g_mesh.v[tr.i2];
+
+      /* Face normal (model space) */
       Vec3 e1 = vsub(p1, p0);
       Vec3 e2 = vsub(p2, p0);
       Vec3 n  = vcross(e1, e2);
 
       float len2 = vdot(n, n);
-      float I = 0.0f;
-      if (len2 > 1e-12f) {
-        float inv_len = 1.0f / sqrtf(len2);
-        n.x *= inv_len; n.y *= inv_len; n.z *= inv_len;
+      if (len2 <= 1e-12f) continue;
+      float inv_len = 1.0f / sqrtf(len2);
+      n.x *= inv_len; n.y *= inv_len; n.z *= inv_len;
 
-        /* Transform normal with the same rotation as demo_wirecube.x */
-        Vec3 nv = rotateNormalAxis110(n, g_angle);
+      /* View-space normal: same rotation as the modelview (uniform scale, so ok). */
+      Vec3 nv = rotateAxis110CS(n, c, s);
 
-        /* Headlight (vector from surface to camera) in view space: +Z */
-        I = vdot(nv, g_light_dir_view);
-        if (I < 0.0f) I = 0.0f;
-        if (I > 1.0f) I = 1.0f;
-      }
-
-      /* Backface cull in filled mode. */
+      /* Headlight + backface cull: camera is at origin, so front-facing => normal.z > 0. */
+      float I = nv.z;
       if (I <= 0.0f) continue;
+      if (I > 1.0f) I = 1.0f;
 
-      unsigned char c = (unsigned char)(I * 255.0f);
-      glColor3ub(c, c, c);
-    } else {
-      glColor3ub(255, 255, 255);
+      /* Depth key (average view-space z). */
+      Vec3 q0 = { p0.x * 1.2f, p0.y * 1.2f, p0.z * 1.2f };
+      Vec3 q1 = { p1.x * 1.2f, p1.y * 1.2f, p1.z * 1.2f };
+      Vec3 q2 = { p2.x * 1.2f, p2.y * 1.2f, p2.z * 1.2f };
+      q0 = rotateAxis110CS(q0, c, s);
+      q1 = rotateAxis110CS(q1, c, s);
+      q2 = rotateAxis110CS(q2, c, s);
+
+      float z0 = q0.z - 5.0f;
+      float z1 = q1.z - 5.0f;
+      float z2 = q2.z - 5.0f;
+      float zavg = (z0 + z1 + z2) / 3.0f;
+
+      g_drawtris[draw_n].tri_idx = i;
+      g_drawtris[draw_n].z = zavg;
+      g_drawtris[draw_n].shade = (unsigned char)(I * 255.0f);
+      draw_n++;
     }
 
-    glVertex3f(p0.x, p0.y, p0.z);
-    glVertex3f(p1.x, p1.y, p1.z);
-    glVertex3f(p2.x, p2.y, p2.z);
+    qsort(g_drawtris, (size_t)draw_n, sizeof(DrawTri), cmpDrawTri);
+
+    glBegin(GL_TRIANGLES);
+    for (int k = 0; k < draw_n; k++) {
+      int i = g_drawtris[k].tri_idx;
+      Tri tr = g_mesh.t[i];
+
+      unsigned char c8 = g_drawtris[k].shade;
+      glColor3ub(c8, c8, c8);
+
+      Vec3 p0 = g_mesh.v[tr.i0];
+      Vec3 p1 = g_mesh.v[tr.i1];
+      Vec3 p2 = g_mesh.v[tr.i2];
+
+      glVertex3f(p0.x, p0.y, p0.z);
+      glVertex3f(p1.x, p1.y, p1.z);
+      glVertex3f(p2.x, p2.y, p2.z);
+    }
+    glEnd();
+  } else {
+    glBegin(GL_TRIANGLES);
+    for (int i = 0; i < g_mesh.t_count; i++) {
+      Tri tr = g_mesh.t[i];
+      Vec3 p0 = g_mesh.v[tr.i0];
+      Vec3 p1 = g_mesh.v[tr.i1];
+      Vec3 p2 = g_mesh.v[tr.i2];
+      glColor3ub(255, 255, 255);
+      glVertex3f(p0.x, p0.y, p0.z);
+      glVertex3f(p1.x, p1.y, p1.z);
+      glVertex3f(p2.x, p2.y, p2.z);
+    }
+    glEnd();
   }
-  glEnd();
+
 
   glFlush();
   glutSwapBuffers();
@@ -368,7 +458,7 @@ int main(int argc, char **argv)
   glutInit(&argc, argv);
 
   /* Choose 256 or 512 by editing these, or let the library pick the closest. */
-  glutInitWindowSize(256, 256);
+  glutInitWindowSize(512, 512);
   glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
   glutCreateWindow("demo_objflat");
 

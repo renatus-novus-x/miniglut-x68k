@@ -61,6 +61,9 @@ static GLenum g_matrix_mode = GL_MODELVIEW;
 static uint16_t g_clear_color = 0;
 static uint16_t g_draw_color = 0xFFFF;
 
+/* If enabled, GL_TRIANGLES are rasterized as filled triangles (flat color). */
+static int g_fill_triangles = 0;
+
 static GLenum g_begin_mode = 0;
 static int g_in_begin = 0;
 
@@ -190,6 +193,79 @@ static void drawLine(int x0, int y0, int x1, int y1, uint16_t c)
     y += y_inc;
   }
 #endif
+}
+
+/* Fill a horizontal span [x0, x1] at scanline y with color c (inclusive). */
+static void fillSpan(int y, int x0, int x1, uint16_t c)
+{
+  if ((unsigned)y >= (unsigned)GFX_H) return;
+  if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
+  if (x1 < 0 || x0 >= GFX_W) return;
+  if (x0 < 0) x0 = 0;
+  if (x1 >= GFX_W) x1 = GFX_W - 1;
+
+  int n = x1 - x0 + 1;
+  volatile uint16_t *p = gvramPtr(x0, y);
+  while (n--) *p++ = c;
+}
+
+/* Flat-color triangle fill (no Z, no clipping, no texture). */
+static void fillTriangleFlat(ScreenPt a, ScreenPt b, ScreenPt c, uint16_t col)
+{
+  if (!a.valid || !b.valid || !c.valid) return;
+
+  /* Sort vertices by y (ascending). */
+  ScreenPt v0 = a, v1 = b, v2 = c;
+  if (v1.y < v0.y) { ScreenPt t=v0; v0=v1; v1=t; }
+  if (v2.y < v0.y) { ScreenPt t=v0; v0=v2; v2=t; }
+  if (v2.y < v1.y) { ScreenPt t=v1; v1=v2; v2=t; }
+
+  int y0 = v0.y, y1 = v1.y, y2 = v2.y;
+  int x0 = v0.x, x1 = v1.x, x2 = v2.x;
+
+  /* Fully horizontal -> nothing meaningful to fill. */
+  if (y0 == y2) return;
+
+  /* 16.16 fixed-point edge walker for v0->v2. */
+  int dy02 = y2 - y0;
+  int dx02 = x2 - x0;
+  int32_t sx02 = ((int32_t)dx02 << 16) / dy02;
+  int32_t x02 = ((int32_t)x0 << 16);
+
+  /* Upper part v0->v1 (if any). */
+  if (y1 > y0) {
+    int dy01 = y1 - y0;
+    int dx01 = x1 - x0;
+    int32_t sx01 = ((int32_t)dx01 << 16) / dy01;
+    int32_t x01 = ((int32_t)x0 << 16);
+
+    for (int y = y0; y < y1; y++) {
+      int xa = (int)(x02 >> 16);
+      int xb = (int)(x01 >> 16);
+      fillSpan(y, xa, xb, col);
+      x02 += sx02;
+      x01 += sx01;
+    }
+  } else {
+    /* Flat-top: advance x02 to y1. */
+    x02 += sx02 * (y1 - y0);
+  }
+
+  /* Lower part v1->v2 (if any). */
+  if (y2 > y1) {
+    int dy12 = y2 - y1;
+    int dx12 = x2 - x1;
+    int32_t sx12 = ((int32_t)dx12 << 16) / dy12;
+    int32_t x12 = ((int32_t)x1 << 16);
+
+    for (int y = y1; y <= y2; y++) {
+      int xa = (int)(x02 >> 16);
+      int xb = (int)(x12 >> 16);
+      fillSpan(y, xa, xb, col);
+      x02 += sx02;
+      x12 += sx12;
+    }
+  }
 }
 
 static void matIdentity(Mat4 *o)
@@ -503,6 +579,12 @@ void glClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
   g_clear_color = RGB2GRB((uint8_t)ri, (uint8_t)gi, (uint8_t)bi);
 }
 
+void miniglSetFillTriangles(int enable)
+{
+  g_fill_triangles = (enable != 0);
+}
+
+
 void glClear(GLbitfield mask)
 {
   if (!(mask & GL_COLOR_BUFFER_BIT)) return;
@@ -635,9 +717,13 @@ void glVertex3f(GLfloat x, GLfloat y, GLfloat z)
         g_tri_pts[g_tri_count++] = p;
       }
       if (g_tri_count == 3) {
-        emitLine(g_tri_pts[0], g_tri_pts[1]);
-        emitLine(g_tri_pts[1], g_tri_pts[2]);
-        emitLine(g_tri_pts[2], g_tri_pts[0]);
+        if (g_fill_triangles) {
+          fillTriangleFlat(g_tri_pts[0], g_tri_pts[1], g_tri_pts[2], g_draw_color);
+        } else {
+          emitLine(g_tri_pts[0], g_tri_pts[1]);
+          emitLine(g_tri_pts[1], g_tri_pts[2]);
+          emitLine(g_tri_pts[2], g_tri_pts[0]);
+        }
         g_tri_count = 0;
       }
       break;

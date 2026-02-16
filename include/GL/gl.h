@@ -56,6 +56,9 @@ void glFlush(void);
 int  miniglGetWidth(void);
 int  miniglGetHeight(void);
 
+/* MiniGL extension: fill triangles with current flat color when enabled. */
+void miniglSetFillTriangles(int enable);
+
 #ifdef __cplusplus
 }
 #endif

@@ -5,15 +5,15 @@
 miniglut-x68k (experimental)
 ============================
 
-X68000（elf2x68k / Human68k）向けの、超小型 GLUT 互換(ish) サブセットです。
+X68000（elf2x68k / Human68k）向けの、超小型 GLUT 互換(風の) サブセットです。
 
 freeglut の移植ではありません。ウィンドウシステムはなく、フルスクリーン 1画面のみです。
-最小イベントループと、GVRAM へ直接描画する OpenGL 風（即時モード）の API を提供します。
+最小イベントループと、GVRAM へ直接描画する OpenGL 風（immediate-mode）の API を提供します。
 
 目的
 ----
 - X68000 上で「GLUT サンプルっぽいコード」を最小限の修正で動かす足場を作る
-- まずはワイヤフレームと簡単なフラット塗りから始め、段階的に機能追加する
+- まずはワイヤフレームと簡単なフラットシェーディングから始め、段階的に機能追加する
 - 実機/エミュ上で追いやすい小さなコードベースにする
 
 実装している GLUT API（コア）
@@ -52,7 +52,7 @@ include/GL にヘッダがあります。OpenGL の完全実装ではなく、�
 - 即時モード: glBegin/glEnd（GL_LINES, GL_TRIANGLES）, glVertex3f
 - 色: glColor3ub
 - 互換スイッチ（最小実装）:
-  - 三角形のフラット塗りは以下のときに有効です:
+  - 三角形のフラットシェーディングは以下のときに有効です:
     - glShadeModel(GL_FLAT)
     - glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
   - ワイヤフレームは以下で選択します:
@@ -67,12 +67,12 @@ include/GL にヘッダがあります。OpenGL の完全実装ではなく、�
 - src/miniglut.c    : GLUT 実装
 - src/minigl.c      : ソフトウェア描画と X68000 の初期化/復帰処理
 - src/demo_wirecube.c : デモ（回転ワイヤキューブ）
-- src/demo_objflat.c  : デモ（OBJ 読込、ワイヤ/フラット切替）
+- src/demo_objflat.c  : デモ（OBJ 読込、ワイヤフレーム/フラットシェーディング切替）
 
 ビルド（elf2x68k）
 -----------------
 必要なもの:
-- m68k-xelf-gcc（elf2x68k ツールチェイン）が PATH にあること
+- m68k-xelf-gcc（elf2x68k toolchain）が PATH にあること
 
 ビルド:
 - make
@@ -101,7 +101,7 @@ demo_objflat
 注意点 / 制限
 -------------
 - テクスチャなし、αブレンディングなし、Z バッファなし。
-- demo_objflat の「隠面っぽい見た目」は、三角形の簡易ソート（Painter’s algorithm）によるものです。
+- demo_objflat の「隠面消去っぽい見た目」は、三角形の簡易ソート（Painter’s algorithm）によるものです。
   複雑形状や自己交差メッシュでは破綻する場合があります。
 - クリッピングは簡易（主に bounds check）。
 - reshape / mouse / menu などは未実装です。

@@ -61,8 +61,9 @@ static GLenum g_matrix_mode = GL_MODELVIEW;
 static uint16_t g_clear_color = 0;
 static uint16_t g_draw_color = 0xFFFF;
 
-/* If enabled, GL_TRIANGLES are rasterized as filled triangles (flat color). */
-static int g_fill_triangles = 0;
+/* Minimal state for GLUT-like toggles. */
+static GLenum g_shade_model = GL_SMOOTH;
+static GLenum g_polygon_mode = GL_FILL;
 
 static GLenum g_begin_mode = 0;
 static int g_in_begin = 0;
@@ -581,7 +582,13 @@ void glClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
 
 void miniglSetFillTriangles(int enable)
 {
-  g_fill_triangles = (enable != 0);
+  /* Backward-compatible extension: map to standard-like state toggles. */
+  if (enable) {
+    glShadeModel(GL_FLAT);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  } else {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  }
 }
 
 
@@ -670,6 +677,18 @@ void glColor3ub(GLubyte r, GLubyte g, GLubyte b)
   g_draw_color = RGB2GRB(r, g, b);
 }
 
+void glShadeModel(GLenum mode)
+{
+  g_shade_model = mode;
+}
+
+void glPolygonMode(GLenum face, GLenum mode)
+{
+  (void)face;
+  g_polygon_mode = mode;
+}
+
+
 void glBegin(GLenum mode)
 {
   g_begin_mode = mode;
@@ -717,7 +736,8 @@ void glVertex3f(GLfloat x, GLfloat y, GLfloat z)
         g_tri_pts[g_tri_count++] = p;
       }
       if (g_tri_count == 3) {
-        if (g_fill_triangles) {
+        int do_fill = (g_polygon_mode == GL_FILL) && (g_shade_model == GL_FLAT);
+        if (do_fill) {
           fillTriangleFlat(g_tri_pts[0], g_tri_pts[1], g_tri_pts[2], g_draw_color);
         } else {
           emitLine(g_tri_pts[0], g_tri_pts[1]);

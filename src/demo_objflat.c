@@ -322,7 +322,13 @@ static void display(void)
     return;
   }
 
-  miniglSetFillTriangles(g_mode_flat);
+  /* GLUT-like toggles: use glShadeModel / glPolygonMode instead of MiniGL extension. */
+  glShadeModel(GL_FLAT);
+  if (g_mode_flat) {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  } else {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  }
 
   if (g_mode_flat) {
     /* Painter's algorithm (back-to-front) since we have no Z buffer. */

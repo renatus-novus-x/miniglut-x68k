@@ -30,6 +30,17 @@ typedef unsigned char GLubyte;
 #define GL_LINE_LOOP  0x0002
 #define GL_TRIANGLES  0x0004
 
+#define GL_FLAT      0x1D00
+#define GL_SMOOTH    0x1D01
+
+#define GL_FRONT           0x0404
+#define GL_BACK            0x0405
+#define GL_FRONT_AND_BACK  0x0408
+
+#define GL_FILL      0x1B02
+#define GL_LINE      0x1B01
+
+
 /* API subset */
 void glClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a);
 void glClear(GLbitfield mask);
@@ -45,6 +56,9 @@ void glScalef(GLfloat x, GLfloat y, GLfloat z);
 void glOrtho(GLfloat l, GLfloat r, GLfloat b, GLfloat t, GLfloat n, GLfloat f);
 
 void glColor3ub(GLubyte r, GLubyte g, GLubyte b);
+
+void glShadeModel(GLenum mode);
+void glPolygonMode(GLenum face, GLenum mode);
 
 void glBegin(GLenum mode);
 void glVertex3f(GLfloat x, GLfloat y, GLfloat z);

@@ -53,7 +53,7 @@ References that informed the minimal X68000 video/IOCS access style:
 - [demo_wirecube.x](https://raw.githubusercontent.com/renatus-novus-x/miniglut-x68k/main/bin/demo_wirecube.x)
 - [demo_objflat.x](https://raw.githubusercontent.com/renatus-novus-x/miniglut-x68k/main/bin/demo_objflat.x)
 
-## demo_objflat
+## demo_wirecube
 
 Run:
 - `demo_wirecube.x`

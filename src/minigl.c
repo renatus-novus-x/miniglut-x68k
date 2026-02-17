@@ -450,13 +450,21 @@ void miniglSwapBuffers(void)
   g_back_buf = tmp;
 
 #ifdef __human68k__
-  /* Copy only the visible 256x256 area into VRAM (stride is 512 in 16bpp modes). */
+  /* Present backbuffer to VRAM.
+     - 512x512 (CRTMOD 12): VRAM stride equals width, so we can memcpy once.
+     - 256x256 (CRTMOD 14 fallback): VRAM stride is 512, so copy row-by-row.
+  */
   volatile uint16_t *dst = (volatile uint16_t *)(uintptr_t)GVRAM_BASE;
   const uint16_t *src = (const uint16_t *)g_front_buf;
-  for (int y = 0; y < GFX_H; y++) {
-    memcpy((void *)(dst + (size_t)y * (size_t)VRAM_STRIDE_W),
-           (const void *)(src + (size_t)y * (size_t)GFX_W),
-           (size_t)GFX_W * 2u);
+  if (GFX_W == VRAM_STRIDE_W) {
+    memcpy((void *)dst, (const void *)src,
+           (size_t)GFX_W * (size_t)GFX_H * 2u);
+  } else {
+    for (int y = 0; y < GFX_H; y++) {
+      memcpy((void *)(dst + (size_t)y * (size_t)VRAM_STRIDE_W),
+             (const void *)(src + (size_t)y * (size_t)GFX_W),
+             (size_t)GFX_W * 2u);
+    }
   }
 #endif
 }
@@ -603,6 +611,24 @@ void glClear(GLbitfield mask)
     return;
   }
 #endif
+
+  /* Fast clear for RAM backbuffer (double-buffered 512x512 or fallback 256x256).
+     This is typically a big win because many demos clear every frame.
+  */
+  if (g_double_enabled && g_back_buf) {
+    size_t n = (size_t)GFX_W * (size_t)GFX_H;
+    if (g_clear_color == 0) {
+      memset(g_back_buf, 0, n * 2u);
+    } else {
+      uint32_t pat = ((uint32_t)g_clear_color << 16) | (uint32_t)g_clear_color;
+      uint32_t *p32 = (uint32_t *)g_back_buf;
+      size_t n32 = n / 2u;
+      while (n32--) {
+        *p32++ = pat;
+      }
+    }
+    return;
+  }
 
   for (int y = 0; y < GFX_H; y++) {
     for (int x = 0; x < GFX_W; x++) {

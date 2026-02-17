@@ -219,36 +219,12 @@ static Vec3 vcross(Vec3 a, Vec3 b) {
 }
 static float vdot(Vec3 a, Vec3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
 
-
-static Vec3 rotateNormalAxis110(Vec3 v, float angDeg)
+static Vec3 rotateAxisCS(Vec3 v, float ax, float ay, float az, float c, float s)
 {
-  /* Match demo_wirecube: glRotatef(angle, 1,1,0) */
-  const float inv = 0.7071067811865475f; /* 1/sqrt(2) */
-  Vec3 a = { inv, inv, 0.0f };
-
-  float t = angDeg * (float)M_PI / 180.0f;
-  float c = cosf(t);
-  float s = sinf(t);
-
-  /* Rodrigues' rotation formula */
-  Vec3 axv = {
-    a.y * v.z - a.z * v.y,
-    a.z * v.x - a.x * v.z,
-    a.x * v.y - a.y * v.x
-  };
-  float adv = a.x * v.x + a.y * v.y + a.z * v.z;
-
-  Vec3 r;
-  r.x = v.x * c + axv.x * s + a.x * adv * (1.0f - c);
-  r.y = v.y * c + axv.y * s + a.y * adv * (1.0f - c);
-  r.z = v.z * c + axv.z * s + a.z * adv * (1.0f - c);
-  return r;
-}
-
-static Vec3 rotateAxis110CS(Vec3 v, float c, float s)
-{
-  const float inv = 0.7071067811865475f; /* 1/sqrt(2) */
-  Vec3 a = { inv, inv, 0.0f };
+  float len2 = ax*ax + ay*ay + az*az;
+  if (len2 < 1e-12f) return v;
+  float inv_len = 1.0f / sqrtf(len2);
+  Vec3 a = { ax * inv_len, ay * inv_len, az * inv_len };
 
   Vec3 axv = {
     a.y * v.z - a.z * v.y,
@@ -263,9 +239,6 @@ static Vec3 rotateAxis110CS(Vec3 v, float c, float s)
   r.z = v.z * c + axv.z * s + a.z * adv * (1.0f - c);
   return r;
 }
-
-
-
 
 static void drawCubeLines(void)
 {
@@ -310,7 +283,7 @@ static void display(void)
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
   glTranslatef(0.0f, 0.0f, -5.0f);
-  glRotatef(g_angle, 1.0f, 1.0f, 0.0f);
+  glRotatef(g_angle, 0.0f, 1.0f, 0.0f);
   glScalef(1.2f, 1.2f, 1.2f);
 
   /* When we are showing the fallback cube in wireframe mode, draw exactly the same edges as demo_wirecube.x. */
@@ -364,7 +337,7 @@ static void display(void)
       n.x *= inv_len; n.y *= inv_len; n.z *= inv_len;
 
       /* View-space normal: same rotation as the modelview (uniform scale, so ok). */
-      Vec3 nv = rotateAxis110CS(n, c, s);
+      Vec3 nv = rotateAxisCS(n, 0.0f, 1.0f, 0.0f, c, s);
 
       /* Headlight + backface cull: camera is at origin, so front-facing => normal.z > 0. */
       float I = nv.z;
@@ -375,9 +348,9 @@ static void display(void)
       Vec3 q0 = { p0.x * 1.2f, p0.y * 1.2f, p0.z * 1.2f };
       Vec3 q1 = { p1.x * 1.2f, p1.y * 1.2f, p1.z * 1.2f };
       Vec3 q2 = { p2.x * 1.2f, p2.y * 1.2f, p2.z * 1.2f };
-      q0 = rotateAxis110CS(q0, c, s);
-      q1 = rotateAxis110CS(q1, c, s);
-      q2 = rotateAxis110CS(q2, c, s);
+      q0 = rotateAxisCS(q0, 0.0f, 1.0f, 0.0f, c, s);
+      q1 = rotateAxisCS(q1, 0.0f, 1.0f, 0.0f, c, s);
+      q2 = rotateAxisCS(q2, 0.0f, 1.0f, 0.0f, c, s);
 
       float z0 = q0.z - 5.0f;
       float z1 = q1.z - 5.0f;

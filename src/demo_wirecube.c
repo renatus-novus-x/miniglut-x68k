@@ -49,7 +49,7 @@ static void display(void)
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
   glTranslatef(0.0f, 0.0f, -5.0f);
-  glRotatef(g_angle, 1.0f, 1.0f, 0.0f);
+  glRotatef(g_angle, 0.0f, 1.0f, 0.0f);
   glScalef(1.2f, 1.2f, 1.2f);
 
   glColor3ub(255, 255, 255);

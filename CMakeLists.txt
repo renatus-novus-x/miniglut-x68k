@@ -20,6 +20,7 @@ if(MSVC)
 #  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
 #  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:mainCRTStartup")
   set_target_properties(demo_wirecube PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$(ProjectDir)/../bin")
+  set_target_properties(demo_objflat PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$(ProjectDir)/../bin")
 
   set(CompilerFlags
     CMAKE_CXX_FLAGS
@@ -29,9 +30,20 @@ if(MSVC)
     CMAKE_C_FLAGS_DEBUG
     CMAKE_C_FLAGS_RELEASE
   )
-  #foreach(CompilerFlag ${CompilerFlags})
-  #  string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
-  #endforeach()
+  foreach(CompilerFlag ${CompilerFlags})
+    string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
+  endforeach()
+
+  add_custom_command(
+    TARGET demo_wirecube
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_SOURCE_DIR}/bin"
+  )
+  add_custom_command(
+    TARGET demo_objflat
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_SOURCE_DIR}/bin"
+  )
 endif()
 
 if(APPLE)

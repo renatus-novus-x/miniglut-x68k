@@ -1,5 +1,9 @@
 [English](README.md) | [日本語](README.ja.md)
 
+[![windows](https://github.com/renatus-novus-x/miniglut-x68k/workflows/windows/badge.svg)](https://github.com/renatus-novus-x/miniglut-x68k/actions?query=workflow%3Awindows)
+[![macos](https://github.com/renatus-novus-x/miniglut-x68k/workflows/macos/badge.svg)](https://github.com/renatus-novus-x/miniglut-x68k/actions?query=workflow%3Amacos)
+[![ubuntu](https://github.com/renatus-novus-x/miniglut-x68k/workflows/ubuntu/badge.svg)](https://github.com/renatus-novus-x/miniglut-x68k/actions?query=workflow%3Aubuntu)
+
 ![demo](images/tether.gif)
 
 miniglut-x68k (experimental)

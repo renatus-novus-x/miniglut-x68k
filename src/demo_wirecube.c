@@ -1,9 +1,15 @@
 #include <stdlib.h>
 #include <math.h>
-#include "GL/glut.h"
-#include "GL/gl.h"
-#include "GL/glu.h"
 
+#if defined(__APPLE__)
+  #include <GLUT/glut.h>
+  #include <OpenGL/gl.h>
+  #include <OpenGL/glu.h>
+#else
+  #include <GL/glut.h>
+  #include <GL/gl.h>
+  #include <GL/glu.h>
+#endif
 static float g_angle = 0.0f;
 
 static void drawCubeLines(void)
@@ -72,7 +78,8 @@ static void keyboard(unsigned char key, int x, int y)
   (void)y;
 
   if (key == 27 || key == 'q' || key == 'Q') {
-    glutLeaveMainLoop();
+    /* Keep compatibility with GLUT (not freeglut-only). */
+    exit(0);
   }
 }
 

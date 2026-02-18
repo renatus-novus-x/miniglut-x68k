@@ -1,0 +1,33 @@
+name: ubuntu
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: install dependencies
+      run: |
+       sudo apt-get update
+       sudo apt-get install libxi-dev libgl1-mesa-dev libglu1-mesa-dev mesa-common-dev libxrandr-dev libxxf86vm-dev
+       sudo apt-get install freeglut3-dev
+
+    - name: cmake build
+      run: |
+        mkdir build
+        cd  build
+        cmake ../ -DCMAKE_BUILD_TYPE=Release
+        cmake --build .
+
+#    - uses: actions/upload-artifact@v3
+#      with:
+#        name: my-artifact
+#        path: bin/

@@ -35,7 +35,6 @@ Extra compatibility helpers (used by many GLUT samples)
 - glutInitWindowSize
 - glutSwapBuffers
 - glutPostRedisplay
-- glutLeaveMainLoop
 
 Video modes and buffering
 -------------------------

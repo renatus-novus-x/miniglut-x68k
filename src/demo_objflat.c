@@ -9,9 +9,15 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-#include "GL/glut.h"
-#include "GL/gl.h"
-#include "GL/glu.h"
+#if defined(__APPLE__)
+  #include <GLUT/glut.h>
+  #include <OpenGL/gl.h>
+  #include <OpenGL/glu.h>
+#else
+  #include <GL/glut.h>
+  #include <GL/gl.h>
+  #include <GL/glu.h>
+#endif
 
 /*
   demo_objflat:
@@ -409,18 +415,23 @@ static void idle(void)
   glutPostRedisplay();
 }
 
-static void key(unsigned char k, int x, int y)
+static void keyboard(unsigned char k, int x, int y)
 {
   (void)x; (void)y;
-  if (k == 27) { glutLeaveMainLoop(); return; }
+  if (k == 27) { exit(0); }
   if (k == 't' || k == ' ') g_mode_flat = !g_mode_flat;
   else if (k == 'w') g_mode_flat = 0;
   else if (k == 'f') g_mode_flat = 1;
 }
 
-int main(int argc, char **argv)
+static void finalize(void)
 {
-  const char *path = (argc >= 2) ? argv[1] : NULL;
+  meshFree(&g_mesh);
+}
+
+static void initialize(int argc, char **argv)
+{
+const char *path = (argc >= 2) ? argv[1] : NULL;
   memset(&g_mesh, 0, sizeof(g_mesh));
 
   if (path && loadObj(path, &g_mesh)) {
@@ -433,8 +444,10 @@ int main(int argc, char **argv)
     g_is_fallback = 1;
   }
   normalizeMeshToUnit(&g_mesh);
+  /* Ensure resources are released when exiting via exit(). */
+  atexit(finalize);
 
-  glutInit(&argc, argv);
+glutInit(&argc, argv);
 
   /* Choose 256 or 512 by editing these, or let the library pick the closest. */
   glutInitWindowSize(512, 512);
@@ -442,11 +455,16 @@ int main(int argc, char **argv)
   glutCreateWindow("demo_objflat");
 
   glutDisplayFunc(display);
-  glutKeyboardFunc(key);
+  glutKeyboardFunc(keyboard);
   glutIdleFunc(idle);
+}
 
+int main(int argc, char **argv)
+{
+  initialize(argc, argv);
   glutMainLoop();
 
-  meshFree(&g_mesh);
+  /* GLUT typically never returns here, but keep it for completeness. */
   return 0;
 }
+

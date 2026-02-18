@@ -35,7 +35,6 @@ freeglut の移植ではありません。ウィンドウシステムはなく�
 - glutInitWindowSize
 - glutSwapBuffers
 - glutPostRedisplay
-- glutLeaveMainLoop
 
 画面モードとバッファ
 --------------------

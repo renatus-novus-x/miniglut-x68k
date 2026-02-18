@@ -14,6 +14,26 @@ add_executable(demo_objflat
   src/demo_objflat.c
 )
 
+if(MSVC)
+  add_definitions(-D_UNICODE -DUNICODE -D_USE_MATH_DEFINES -DNOMINMAX -D_CRT_SECURE_NO_WARNINGS)
+#  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++latest")
+#  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
+#  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:mainCRTStartup")
+  set_target_properties(demo_wirecube PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$(ProjectDir)/../bin")
+
+  set(CompilerFlags
+    CMAKE_CXX_FLAGS
+    CMAKE_CXX_FLAGS_DEBUG
+    CMAKE_CXX_FLAGS_RELEASE
+    CMAKE_C_FLAGS
+    CMAKE_C_FLAGS_DEBUG
+    CMAKE_C_FLAGS_RELEASE
+  )
+  #foreach(CompilerFlag ${CompilerFlags})
+  #  string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
+  #endforeach()
+endif()
+
 if(APPLE)
   find_library(OPENGL_FRAMEWORK OpenGL REQUIRED)
   find_library(GLUT_FRAMEWORK GLUT REQUIRED)
